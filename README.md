@@ -88,10 +88,13 @@ SERIAL_PORT = "COM1"  # 使用するCOMポートに変更
 ```bash
 # システムパッケージ
 sudo apt update
-sudo apt install python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0
-sudo apt install gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good
-sudo apt install gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
-sudo apt install libgstrtspserver-1.0-dev gir1.2-gst-rtsp-server-1.0
+sudo apt install python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 -y
+sudo apt install gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good -y
+sudo apt install gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav -y
+sudo apt install libgstrtspserver-1.0-dev gir1.2-gst-rtsp-server-1.0 -y
+
+# 日本語フォント（日本語表示に必要）
+sudo apt install fonts-ipafont fonts-ipafont-gothic fonts-ipafont-mincho -y
 
 # Pythonパッケージ
 pip3 install pyserial pillow
