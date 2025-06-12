@@ -37,9 +37,25 @@ SERIAL_CONFIG = {
 }
 
 # RTSP配信設定
-WIDTH, HEIGHT, FPS = 640, 480, 15
+RESOLUTION = "720"  # "1080", "720", "480" のいずれかを指定
+FPS = 15
 RTSP_PORT = 8554
 RTSP_PATH = "/elevator"
+
+# 解像度設定
+RESOLUTION_CONFIGS = {
+    "1080": {"width": 1920, "height": 1080},
+    "720": {"width": 1280, "height": 720},
+    "480": {"width": 640, "height": 480}
+}
+
+# 現在の解像度設定を取得
+if RESOLUTION not in RESOLUTION_CONFIGS:
+    logger.warning(f"⚠️ 無効な解像度設定: {RESOLUTION}. デフォルト720pを使用します")
+    RESOLUTION = "720"
+
+WIDTH = RESOLUTION_CONFIGS[RESOLUTION]["width"]
+HEIGHT = RESOLUTION_CONFIGS[RESOLUTION]["height"]
 
 # ── ログ設定 ─────────────────────────────────
 logging.basicConfig(
@@ -210,6 +226,9 @@ class ElevatorRTSPFactory(GstRtspServer.RTSPMediaFactory):
 
     def push_frames(self):
         """フレーム生成・配信（ENQ受信専用）"""
+        # 解像度に応じたレイアウト設定
+        layout = self._get_layout_config()
+        
         # 日本語フォント設定
         font_paths = [
             "/usr/share/fonts/truetype/ipafont-mincho/ipam.ttf",  # Linux
@@ -220,12 +239,14 @@ class ElevatorRTSPFactory(GstRtspServer.RTSPMediaFactory):
         font_large = None
         font_medium = None
         font_small = None
+        font_tiny = None
         
         for font_path in font_paths:
             try:
-                font_large = ImageFont.truetype(font_path, 48)
-                font_medium = ImageFont.truetype(font_path, 32)
-                font_small = ImageFont.truetype(font_path, 20)
+                font_large = ImageFont.truetype(font_path, layout['font_large'])
+                font_medium = ImageFont.truetype(font_path, layout['font_medium'])
+                font_small = ImageFont.truetype(font_path, layout['font_small'])
+                font_tiny = ImageFont.truetype(font_path, layout['font_tiny'])
                 break
             except (IOError, OSError):
                 continue
@@ -234,6 +255,7 @@ class ElevatorRTSPFactory(GstRtspServer.RTSPMediaFactory):
             font_large = ImageFont.load_default()
             font_medium = ImageFont.load_default()
             font_small = ImageFont.load_default()
+            font_tiny = ImageFont.load_default()
 
         while True:
             try:
@@ -247,18 +269,22 @@ class ElevatorRTSPFactory(GstRtspServer.RTSPMediaFactory):
                 
                 # タイトル
                 title = "エレベーター監視システム（ENQ受信専用）"
-                self._draw_centered_text(draw, title, font_medium, WIDTH//2, 40, 'white')
+                self._draw_centered_text(draw, title, font_medium, WIDTH//2, layout['title_y'], 'white')
                 
                 # 現在時刻表示
-                self._draw_centered_text(draw, timestamp, font_small, WIDTH//2, 80, 'lightgray')
+                self._draw_centered_text(draw, timestamp, font_small, WIDTH//2, layout['timestamp_y'], 'lightgray')
                 
                 # 接続状態表示
                 connection_color = 'lightgreen' if self.elevator_state.connection_status == "接続中" else 'red'
                 self._draw_centered_text(draw, f"接続状態: {self.elevator_state.connection_status}", 
-                                       font_small, WIDTH//2, 110, connection_color)
+                                       font_small, WIDTH//2, layout['connection_y'], connection_color)
+                
+                # 解像度情報表示
+                resolution_info = f"解像度: {WIDTH}x{HEIGHT}@{FPS}fps ({RESOLUTION}p)"
+                self._draw_centered_text(draw, resolution_info, font_tiny, WIDTH//2, layout['connection_y'] + 30, 'gray')
                 
                 # エレベーター状態表示
-                y_pos = 150
+                y_pos = layout['status_y']
                 
                 # 状態判定
                 status_type, status_text = self.elevator_state.get_display_status()
@@ -275,15 +301,15 @@ class ElevatorRTSPFactory(GstRtspServer.RTSPMediaFactory):
                     status_border = 'lightgreen'
                 
                 # 状態背景
-                status_rect = [50, y_pos-10, WIDTH-50, y_pos+60]
+                status_rect = [layout['margin'], y_pos-layout['status_height']//4, 
+                              WIDTH-layout['margin'], y_pos+layout['status_height']//2]
                 draw.rectangle(status_rect, fill=status_bg, outline=status_border, width=3)
                 
                 # 状態テキスト
-                self._draw_centered_text(draw, status_text, font_large, WIDTH//2, y_pos+25, status_color)
-                
-                y_pos += 100
+                self._draw_centered_text(draw, status_text, font_large, WIDTH//2, y_pos, status_color)
                 
                 # 詳細情報
+                y_pos = layout['details_start_y']
                 details = [
                     f"荷重: {self.elevator_state.load_weight}kg",
                     f"最終更新: {self.elevator_state.last_update.strftime('%H:%M:%S')}"
@@ -296,16 +322,18 @@ class ElevatorRTSPFactory(GstRtspServer.RTSPMediaFactory):
                 
                 for detail in details:
                     self._draw_centered_text(draw, detail, font_small, WIDTH//2, y_pos, 'lightblue')
-                    y_pos += 25
+                    y_pos += layout['details_spacing']
                 
                 # 通信ログ表示
-                y_pos += 15
-                draw.text((20, y_pos), "ENQ受信ログ:", font=font_small, fill='white')
-                y_pos += 25
+                y_pos = layout['log_start_y']
+                draw.text((layout['margin'], y_pos), "ENQ受信ログ:", font=font_small, fill='white')
+                y_pos += layout['log_spacing'] + 5
                 
-                for log_entry in self.elevator_state.communication_log[-6:]:  # 最新6件
-                    draw.text((20, y_pos), log_entry, font=font_small, fill='lightgray')
-                    y_pos += 18
+                # ログエントリ数を解像度に応じて調整
+                max_entries = layout['max_log_entries']
+                for log_entry in self.elevator_state.communication_log[-max_entries:]:
+                    draw.text((layout['margin'], y_pos), log_entry, font=font_tiny, fill='lightgray')
+                    y_pos += layout['log_spacing']
                 
                 # フレームバッファに送信
                 buf = pil_to_gst_buffer(img)
@@ -318,6 +346,63 @@ class ElevatorRTSPFactory(GstRtspServer.RTSPMediaFactory):
             except Exception as e:
                 logger.error(f"❌ フレーム生成エラー: {e}")
                 time.sleep(1.0)
+
+    def _get_layout_config(self):
+        """解像度に応じたレイアウト設定を取得"""
+        if RESOLUTION == "1080":
+            return {
+                'font_large': 96,      # メイン状態表示
+                'font_medium': 64,     # タイトル
+                'font_small': 40,      # 詳細情報
+                'font_tiny': 32,       # ログ
+                'title_y': 80,
+                'timestamp_y': 140,
+                'connection_y': 180,
+                'status_y': 280,
+                'status_height': 120,
+                'details_start_y': 450,
+                'details_spacing': 50,
+                'log_start_y': 600,
+                'log_spacing': 36,
+                'margin': 40,
+                'max_log_entries': 12
+            }
+        elif RESOLUTION == "720":
+            return {
+                'font_large': 64,      # メイン状態表示
+                'font_medium': 42,     # タイトル
+                'font_small': 28,      # 詳細情報
+                'font_tiny': 22,       # ログ
+                'title_y': 50,
+                'timestamp_y': 100,
+                'connection_y': 130,
+                'status_y': 200,
+                'status_height': 80,
+                'details_start_y': 320,
+                'details_spacing': 35,
+                'log_start_y': 430,
+                'log_spacing': 26,
+                'margin': 30,
+                'max_log_entries': 10
+            }
+        else:  # 480p
+            return {
+                'font_large': 48,      # メイン状態表示
+                'font_medium': 32,     # タイトル
+                'font_small': 20,      # 詳細情報
+                'font_tiny': 16,       # ログ
+                'title_y': 40,
+                'timestamp_y': 80,
+                'connection_y': 110,
+                'status_y': 150,
+                'status_height': 60,
+                'details_start_y': 250,
+                'details_spacing': 25,
+                'log_start_y': 330,
+                'log_spacing': 18,
+                'margin': 20,
+                'max_log_entries': 6
+            }
 
     def _draw_centered_text(self, draw, text, font, x, y, color):
         """中央揃えテキスト描画"""
