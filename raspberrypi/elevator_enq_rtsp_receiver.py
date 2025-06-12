@@ -342,6 +342,52 @@ class SerialENQReceiver:
         self.duplicate_timeout = 0.8  # 重複判定のタイムアウト（秒）を調整
         self.receive_buffer = bytearray()  # 受信バッファを追加
 
+    def test_serial_ports(self):
+        """利用可能なシリアルポートをテスト"""
+        ports_to_test = [
+            "/dev/ttyUSB0",
+            "/dev/ttyUSB1",
+            "/dev/ttyAMA0",
+            "/dev/serial0",
+            "/dev/ttyS0"
+        ]
+        logger.info("🔍 利用可能なシリアルポートを検索中…")
+        available_ports = []
+        
+        for port in ports_to_test:
+            try:
+                ser = serial.Serial(
+                    port=port,
+                    baudrate=9600,
+                    bytesize=serial.EIGHTBITS,
+                    parity=serial.PARITY_EVEN,
+                    stopbits=serial.STOPBITS_ONE,
+                    timeout=1
+                )
+                logger.info(f"✅ {port}: 接続成功")
+                available_ports.append(port)
+                ser.close()
+            except Exception as e:
+                logger.debug(f"❌ {port}: {e}")
+        
+        return available_ports
+
+    def find_working_port(self):
+        """動作するシリアルポートを自動検索"""
+        available_ports = self.test_serial_ports()
+        
+        if not available_ports:
+            logger.warning("⚠️ 利用可能なシリアルポートが見つかりません")
+            return None
+        
+        logger.info(f"📡 検出されたポート: {', '.join(available_ports)}")
+        
+        # 最初に見つかったポートを使用
+        selected_port = available_ports[0]
+        logger.info(f"🎯 使用ポート: {selected_port}")
+        
+        return selected_port
+
     def _is_duplicate_message(self, data_num: int, data_value: int) -> bool:
         """重複メッセージチェック"""
         current_time = time.time()
@@ -684,6 +730,7 @@ def main():
     parser.add_argument('--port', default=SERIAL_PORT, help='シリアルポート')
     parser.add_argument('--rtsp-port', type=int, default=RTSP_PORT, help='RTSPポート番号')
     parser.add_argument('--debug', action='store_true', help='デバッグモード')
+    parser.add_argument('--test-ports', action='store_true', help='シリアルポート検索のみ実行')
     args = parser.parse_args()
     
     # デバッグモード設定
@@ -704,6 +751,23 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
+    # ポート検索のみの場合
+    if args.test_ports:
+        logger.info("🔍 シリアルポート検索モード")
+        elevator_state = ElevatorState()
+        receiver = SerialENQReceiver(elevator_state)
+        available_ports = receiver.test_serial_ports()
+        
+        if available_ports:
+            logger.info(f"\n✅ 検出されたポート: {len(available_ports)}個")
+            for i, port in enumerate(available_ports, 1):
+                logger.info(f"  {i}. {port}")
+            logger.info(f"\n推奨ポート: {available_ports[0]}")
+        else:
+            logger.warning("⚠️ 利用可能なシリアルポートが見つかりませんでした")
+        
+        sys.exit(0)
+    
     # システム初期化
     logger.info("🏢 エレベーターENQ受信専用RTSP映像配信システム起動")
     
@@ -712,6 +776,17 @@ def main():
     
     # シリアルENQ受信初期化
     receiver = SerialENQReceiver(elevator_state)
+    
+    # ポート自動検索機能
+    if args.port == SERIAL_PORT:  # デフォルトポートの場合は自動検索
+        logger.info("🔍 シリアルポート自動検索を実行します")
+        auto_port = receiver.find_working_port()
+        if auto_port:
+            SERIAL_CONFIG['port'] = auto_port
+            logger.info(f"🎯 自動検索で選択されたポート: {auto_port}")
+        else:
+            logger.warning("⚠️ 自動検索でポートが見つかりませんでした。デフォルトポートで試行します")
+    
     if not receiver.initialize():
         logger.warning("⚠️ 初期シリアル接続に失敗しましたが、自動復帰機能で継続します")
     
