@@ -115,6 +115,26 @@ RTSP_PORT = 8554              # RTSPポート番号
 
 まず、シリアル通信が正常に動作するか確認します。
 
+#### Backend（PC）側でシリアルポート確認
+
+```cmd
+cd backend
+python serial_debug_test.py test
+```
+
+#### Backend（PC）側でシリアル通信監視
+
+```cmd
+# ログなしでモニタリング
+python serial_debug_test.py COM3
+
+# ログありでモニタリング（自動ファイル名）
+python serial_debug_test.py COM3 elevator.log
+
+# ヘルプ表示
+python serial_debug_test.py help
+```
+
 #### Raspberry Pi 側でシリアルポート確認
 
 ```bash
@@ -122,10 +142,17 @@ cd raspberrypi
 python3 serial_debug_test.py test
 ```
 
-#### シリアル通信監視
+#### Raspberry Pi 側でシリアル通信監視
 
 ```bash
+# ログなしでモニタリング
 python3 serial_debug_test.py /dev/ttyUSB0
+
+# ログありでモニタリング（自動ファイル名）
+python3 serial_debug_test.py /dev/ttyUSB0 --log
+
+# ログありでモニタリング（カスタムファイル名）
+python3 serial_debug_test.py /dev/ttyUSB0 --log elevator.log
 ```
 
 ### 2. システム起動
@@ -246,10 +273,12 @@ Get-WmiObject -Class Win32_SerialPort | Select-Object Name,DeviceID
 ```
 elevator-enq-simulator/
 ├── README.md                              # このファイル
+├── .gitignore                             # Git除外設定（*.log, *.mp4）
 ├── backend/
-│   └── elevator_enq_only_simulator.py     # PCで動作するシミュレーター
+│   ├── elevator_enq_only_simulator.py     # PCで動作するシミュレーター
+│   └── serial_debug_test.py               # シリアル通信デバッグツール（PC用/ログ記録）
 └── raspberrypi/
-    ├── serial_debug_test.py               # シリアル通信動作確認ツール
+    ├── serial_debug_test.py               # シリアル通信デバッグツール（RPi用/--logオプション）
     └── elevator_enq_rtsp_receiver.py      # RTSP映像配信システム
 ```
 
@@ -275,10 +304,6 @@ elevator-enq-simulator/
 - **フレームレート**: 15fps
 - **エンコード**: H.264
 - **配信**: RTSP
-
-## ライセンス
-
-このプロジェクトは MIT ライセンスの下で公開されています。
 
 ## 作成者
 
