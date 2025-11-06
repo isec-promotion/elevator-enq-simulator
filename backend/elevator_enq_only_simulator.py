@@ -4,6 +4,15 @@
 エレベーターENQ専用シミュレーター
 指定された仕様に従ってENQメッセージのみを送信
 ①現在階 → ②行先階 → ③着床（行先階0000） → ④乗客降客 → 5秒待機
+
+# 使用するCOMポートと開始階数を指定して実行
+python elevator_enq_only_simulator.py --port COM31 --start-floor 1
+
+# COMポートのみ指定（開始階数はデフォルトの1F）
+python elevator_enq_only_simulator.py --port COM31
+
+# すべてデフォルト（COM1、開始階数1F）
+python elevator_enq_only_simulator.py
 """
 
 import serial
